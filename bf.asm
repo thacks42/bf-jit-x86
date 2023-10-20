@@ -96,25 +96,103 @@ init_bf_machine:
         jmp parse_loop
     
     parse_inc_ptr:
+        xor r8d, r8d
+        
+        .folding_loop: ;fold multiple `>` into one addition
+            inc r8
+            mov dl, byte [rsi + r8]
+            cmp dl, '>'
+            je .folding_loop
+        
+        cmp r8d, 1
+        jne .add_multiple ;more than one -> use add instead of increment
+        
         mov word [rdi], 0xff48 ;inc rsi
         mov byte [rdi+2], 0xc6
         add rdi, 3
         jmp parse_loop
+        
+    .add_multiple:
+        mov word [rdi], 0x8348 ; add rsi
+        mov byte [rdi + 2], 0xc6
+        mov byte [rdi + 3], r8b
+        add rdi, 4
+        lea rsi, [rsi + r8 - 1]
+        jmp parse_loop
     
     parse_dec_ptr:
+        xor r8d, r8d
+        
+        .folding_loop: ;fold multiple `<` into one addition
+            inc r8
+            mov dl, byte [rsi + r8]
+            cmp dl, '<'
+            je .folding_loop
+        
+        cmp r8d, 1
+        jne .sub_multiple ;more than one -> use sub instead of decrement
+        
         mov word [rdi], 0xff48 ;dec rsi
         mov byte [rdi+2], 0xce
         add rdi, 3
         jmp parse_loop
+        
+    .sub_multiple:
+        mov word [rdi], 0x8348 ; sub rsi
+        mov byte [rdi + 2], 0xee
+        mov byte [rdi + 3], r8b
+        add rdi, 4
+        lea rsi, [rsi + r8 - 1]
+        jmp parse_loop
+        
     
     parse_inc_mem:
+        xor r8d, r8d
+        
+        .folding_loop: ;fold multiple `+` into one addition
+            inc r8
+            mov dl, byte [rsi + r8]
+            cmp dl, '+'
+            je .folding_loop
+        
+        cmp r8d, 1
+        jne .add_multiple ;more than one -> use add instead of increment
+        
         mov word [rdi], 0x06fe ;inc byte [rsi]
         add rdi, 2
         jmp parse_loop
+        
+    .add_multiple:
+        mov word [rdi], 0x0680 ; add byte [rsi]
+        mov byte [rdi + 2], r8b
+        add rdi, 3
+        lea rsi, [rsi + r8 - 1]
+        jmp parse_loop
+        
+        
+        
     
     parse_dec_mem:
+        xor r8d, r8d
+        
+        .folding_loop: ;fold multiple `-` into one subtraction
+            inc r8
+            mov dl, byte [rsi + r8]
+            cmp dl, '-'
+            je .folding_loop
+        
+        cmp r8d, 1
+        jne .sub_multiple ;more than one -> use sub instead of decrement
+        
         mov word [rdi], 0x0efe ;dec byte [rsi]
         add rdi, 2
+        jmp parse_loop
+        
+    .sub_multiple:
+        mov word [rdi], 0x2e80 ; sub byte [rsi]
+        mov byte [rdi + 2], r8b
+        add rdi, 3
+        lea rsi, [rsi + r8 - 1]
         jmp parse_loop
     
     parse_print:
@@ -137,6 +215,18 @@ init_bf_machine:
         
     
     parse_open_brace:
+        cmp byte [rsi + 1], '-'
+        jne .normal_brace
+        cmp byte [rsi + 2], ']'
+        jne .normal_brace
+        
+        mov word [rdi], 0x06c6
+        mov byte [rdi+2], 0x00
+        add rdi, 3
+        add rsi, 2
+        jmp parse_loop
+        
+        .normal_brace:
         mov byte [rdi], 0x80
         mov dword [rdi+1], 0x840f003e
         mov dword [rdi+5], 0xffffffff
